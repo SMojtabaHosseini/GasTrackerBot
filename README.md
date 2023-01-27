@@ -1,2 +1,2 @@
 # GasTrackerBot
-Get Ethereum network gas
+Get Ethereum network gas on discord
