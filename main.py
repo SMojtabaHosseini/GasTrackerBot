@@ -3,6 +3,7 @@ import os
 import requests
 import json
 import time
+from replit import db
 from keep_alive import keep_alive
 
 intents = discord.Intents.default()
@@ -12,31 +13,53 @@ client = discord.Client(intents=intents)
 @client.event
 async def on_ready():
   print("I'm Live as {0.user}".format(client))
+    
+## Just to avoid to reach api limit create a function to send request each 5 seconds. set the time in db to epoch. if the bot is restarted send a request for the first time.
+db["time"] = 0
 
-  
 def getEthGas():
-  apiKey = os.getenv('ETH_API_KEY')
-  response = requests.get("https://api.etherscan.io/api?module=gastracker&action=gasoracle&apikey=" + apiKey)
-  json_data = json.loads(response.text)
-  return json_data['result']
+  dbTime = db["time"]
+  if time.time() - dbTime >= 5:
+    apiKey = os.getenv('ETH_API_KEY')
+    response = requests.get("https://api.etherscan.io/api?module=gastracker&action=gasoracle&apikey=" + apiKey)
+    json_data = json.loads(response.text)
+    db["ethResult"] = json_data['result']
+    db["time"] = time.time()
+    #return data from api response
+    return json_data['result']
+  else:
+    #return data from database
+    return db['ethResult']
 
-def getPolygonGas():
-  apiKey = os.getenv('POLYGON_API_KEY')
-  response = requests.get("https://api.polygonscan.com/api?module=gastracker&action=gasoracle&apikey=" + apiKey)
-  json_data = json.loads(response.text)
-  return json_data['result']
+## Do the same for polygon
+def getPolyGas():
+  dbTime = db["time"]
+  if time.time() - dbTime >= 5:
+    apiKey = os.getenv('POLYGON_API_KEY')
+    response = requests.get("https://api.polygonscan.com/api?module=gastracker&action=gasoracle&apikey=" + apiKey)
+    json_data = json.loads(response.text)
+    db["polyResult"] = json_data['result']
+    db["time"] = time.time()
+    return json_data['result']
+  else:
+    return db["polyResult"]
 
-
-
-def embedMaker(result, chain):
-  safe = result["SafeGasPrice"]
-  propose = result["ProposeGasPrice"]
-  fast = result["FastGasPrice"]
+def msgMaker(ethGas, polyGas):
+  ethSafe = ethGas["SafeGasPrice"]
+  ethPropose = ethGas["ProposeGasPrice"]
+  ethFast = ethGas["FastGasPrice"]
   
-  description = "\n**:turtle:  |  Slow :**\t"+safe+"\n\n**:person_walking:  |  Avarage:**\t"+propose+"\n\n**:person_running:  |  Fast:**\t"+fast
+  ethDesc = "> ```Slow:       "+ethSafe+"\n> Avarage:    "+ethPropose+"\n> Fast:       "+ethFast+"```\n"
+  polySafe = polyGas["SafeGasPrice"]
+  polyPropose = polyGas["ProposeGasPrice"]
+  polyFast = polyGas["FastGasPrice"]
   
-  gas = discord.Embed(title=":fuelpump: {0} Gas Price".format(chain), description=description, color=0x29252b)
-  gas.set_footer(text="\npowered by {0}scan".format(chain))
+  polyDesc = "> ```Slow:       "+polySafe+"\n> Avarage:    "+polyPropose+"\n> Fast:       "+polyFast+"```\n"
+  
+  gas = discord.Embed(title=":fuelpump: Gas Price", color=0x01b04b)
+  gas.add_field(name='Ethereum Gas', value=ethDesc, inline=False)
+  gas.add_field(name='Polygon Gas', value=polyDesc, inline=False)
+  gas.set_footer(text="\npowered by etherscan and polygonscan")
   
   return gas
                         
@@ -46,14 +69,10 @@ async def on_message(message):
   if message.author == client.user:
     return
   
-  if message.content.lower() == "!gas" or message.content.lower() == "!gas eth":
-    result = getEthGas()
-    gas = embedMaker(result,"Ether")
-    await message.reply(embed=gas)
-    
-  if message.content.lower() == "!gas polygon":
-    result = getPolygonGas()
-    gas = embedMaker(result, "Polygon")
+  if message.content.lower() == "!gas":
+    ethGas = getEthGas()
+    polyGas =getPolyGas()
+    gas = msgMaker(ethGas,polyGas)
     await message.reply(embed=gas)
     
     
